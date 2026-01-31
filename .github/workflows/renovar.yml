@@ -1,13 +1,7 @@
 name: AutoRenovador Revolico
 
 on:
-  # Horarios de Cuba (convertidos a UTC)
-  schedule:
-    - cron: '0 14 * * *'   # 9:00 AM Cuba
-    - cron: '0 19 * * *'   # 2:00 PM Cuba
-    - cron: '0 0 * * *'    # 7:00 PM Cuba
-
-  # Para ejecutar manualmente
+  # SE EJECUTA SOLO CUANDO TÚ LO ACTIVAS
   workflow_dispatch:
 
 jobs:

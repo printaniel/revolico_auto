@@ -8,6 +8,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
 import os
 import time
 import random
@@ -63,40 +64,221 @@ def setup_chrome():
     return webdriver.Chrome(options=opciones)
 
 def hacer_login(driver, usuario, password):
-    """Intenta login en Revolico"""
-    imprimir("🔐 Intentando login en Revolico...")
+    """Login DIRECTO a Revolico - Con debugging mejorado"""
+    imprimir("🔐 INTENTANDO LOGIN - MODO DEBUG")
     
     try:
-        driver.get("https://www.revolico.com/login")
+        # 1. IR A LA PÁGINA Y VER QUÉ HAY
+        imprimir(f"🌐 Navegando a: https://www.revolico.com/auth/signin")
+        driver.get("https://www.revolico.com/auth/signin")
+        
+        # Esperar y guardar PRIMER screenshot
         esperar_tiempo(3, 5)
+        driver.save_screenshot("01_pagina_inicial.png")
+        imprimir("📸 Screenshot 1: 01_pagina_inicial.png")
         
-        # Buscar campo usuario
+        # 2. VER QUÉ HAY EN LA PÁGINA
+        imprimir("🔍 ANALIZANDO PÁGINA...")
+        imprimir(f"📏 Tamaño página: {len(driver.page_source)} caracteres")
+        imprimir(f"📍 URL actual: {driver.current_url}")
+        imprimir(f"📄 Título página: {driver.title}")
+        
+        # Ver si estamos en la página correcta
+        if "signin" not in driver.current_url:
+            imprimir(f"⚠️ ADVERTENCIA: No estamos en signin. URL actual: {driver.current_url}")
+            imprimir("🔄 Redirigiendo manualmente a signin...")
+            driver.get("https://www.revolico.com/auth/signin")
+            esperar_tiempo(2, 3)
+        
+        # 3. BUSCAR TODOS LOS INPUTS para ver qué hay realmente
+        imprimir("🔍 BUSCANDO TODOS LOS ELEMENTOS INPUT...")
+        todos_inputs = driver.find_elements(By.TAG_NAME, "input")
+        imprimir(f"📊 Encontrados {len(todos_inputs)} elementos <input>")
+        
+        for i, input_elem in enumerate(todos_inputs):
+            try:
+                input_type = input_elem.get_attribute("type") or "sin-type"
+                input_name = input_elem.get_attribute("name") or "sin-name"
+                input_id = input_elem.get_attribute("id") or "sin-id"
+                input_placeholder = input_elem.get_attribute("placeholder") or "sin-placeholder"
+                
+                imprimir(f"   Input {i}: type='{input_type}', name='{input_name}', id='{input_id}', placeholder='{input_placeholder}'")
+            except:
+                imprimir(f"   Input {i}: Error al obtener info")
+        
+        # 4. BUSCAR FORMULARIO ESPECÍFICO
+        imprimir("🎯 BUSCANDO FORMULARIO DE LOGIN...")
+        
+        # ESTRATEGIA: Buscar por placeholder común
+        placeholder_email = None
+        placeholder_password = None
+        
+        placeholders_comunes = [
+            "Correo electrónico", "correo electrónico", "Email", "email",
+            "E-mail", "e-mail", "Correo", "correo"
+        ]
+        
+        placeholders_password = [
+            "Contraseña", "contraseña", "Password", "password",
+            "Clave", "clave"
+        ]
+        
+        for input_elem in todos_inputs:
+            placeholder = input_elem.get_attribute("placeholder") or ""
+            
+            for placeholder_buscado in placeholders_comunes:
+                if placeholder_buscado.lower() in placeholder.lower():
+                    placeholder_email = placeholder
+                    imprimir(f"✅ POSIBLE campo email: placeholder='{placeholder}'")
+                    campo_email = input_elem
+                    break
+            
+            for placeholder_buscado in placeholders_password:
+                if placeholder_buscado.lower() in placeholder.lower():
+                    placeholder_password = placeholder
+                    imprimir(f"✅ POSIBLE campo password: placeholder='{placeholder}'")
+                    campo_password = input_elem
+                    break
+        
+        # 5. SI NO ENCONTRÓ POR PLACEHOLDER, BUSCAR POR TYPE
+        if 'campo_email' not in locals():
+            imprimir("🔍 Buscando por type='email'...")
+            try:
+                campo_email = driver.find_element(By.CSS_SELECTOR, "input[type='email']")
+                imprimir("✅ Encontrado input[type='email']")
+            except:
+                imprimir("❌ No hay input[type='email']")
+        
+        if 'campo_password' not in locals():
+            imprimir("🔍 Buscando por type='password'...")
+            try:
+                campo_password = driver.find_element(By.CSS_SELECTOR, "input[type='password']")
+                imprimir("✅ Encontrado input[type='password']")
+            except:
+                imprimir("❌ No hay input[type='password']")
+        
+        # 6. VERIFICAR SI TENEMOS LOS CAMPOS
+        campos_encontrados = []
+        
+        if 'campo_email' in locals():
+            campos_encontrados.append(("email", campo_email))
+        
+        if 'campo_password' in locals():
+            campos_encontrados.append(("password", campo_password))
+        
+        if len(campos_encontrados) < 2:
+            imprimir("❌ NO SE ENCONTRARON AMBOS CAMPOS")
+            imprimir("📸 Tomando screenshot detallado...")
+            driver.save_screenshot("02_error_campos.png")
+            
+            # Mostrar HTML de la página (primeros 2000 chars)
+            imprimir("📄 HTML (primeros 2000 caracteres):")
+            imprimir(driver.page_source[:2000])
+            
+            return False
+        
+        # 7. LLENAR CAMPOS
+        imprimir("📝 LLENANDO CAMPOS...")
+        
+        for nombre, campo in campos_encontrados:
+            if nombre == "email":
+                campo.clear()
+                campo.send_keys(usuario)
+                imprimir(f"✅ Email escrito: {usuario}")
+                esperar_tiempo(1, 2)
+            elif nombre == "password":
+                campo.clear()
+                campo.send_keys(password)
+                imprimir("✅ Password escrito")
+                esperar_tiempo(1, 2)
+        
+        # 8. BUSCAR BOTÓN - ESTRATEGIA AGGRESIVA
+        imprimir("🔍 BUSCANDO BOTÓN DE SUBMIT...")
+        
+        # Tomar screenshot ANTES del clic
+        driver.save_screenshot("03_antes_del_login.png")
+        
+        # Intentar todos los métodos
+        boton_encontrado = False
+        
+        # Método 1: Buscar por texto en botones
         try:
-            campo_user = driver.find_element(By.NAME, "username")
-        except:
-            campo_user = driver.find_element(By.NAME, "email")
+            botones = driver.find_elements(By.TAG_NAME, "button")
+            imprimir(f"📊 Encontrados {len(botones)} botones")
+            
+            for i, boton in enumerate(botones):
+                texto = boton.text.strip()
+                imprimir(f"   Botón {i}: '{texto}'")
+                
+                if texto and len(texto) > 0:
+                    texto_lower = texto.lower()
+                    if any(palabra in texto_lower for palabra in ['iniciar', 'entrar', 'login', 'sign', 'continuar', 'siguiente']):
+                        imprimir(f"✅ HACIENDO CLIC en botón: '{texto}'")
+                        boton.click()
+                        boton_encontrado = True
+                        break
+        except Exception as e:
+            imprimir(f"❌ Error buscando botones: {e}")
         
-        campo_user.send_keys(usuario)
-        esperar_tiempo(1, 2)
+        # Método 2: Buscar input type="submit"
+        if not boton_encontrado:
+            try:
+                inputs_submit = driver.find_elements(By.CSS_SELECTOR, "input[type='submit']")
+                if inputs_submit:
+                    imprimir(f"✅ HACIENDO CLIC en input[type='submit']")
+                    inputs_submit[0].click()
+                    boton_encontrado = True
+            except:
+                pass
         
-        # Buscar campo password
-        campo_pass = driver.find_element(By.NAME, "password")
-        campo_pass.send_keys(password)
-        esperar_tiempo(1, 2)
+        # Método 3: Usar ENTER
+        if not boton_encontrado:
+            imprimir("⚠️ No se encontró botón, usando ENTER...")
+            from selenium.webdriver.common.keys import Keys
+            campo_password.send_keys(Keys.RETURN)
+            boton_encontrado = True
         
-        # Buscar botón login
-        botones = driver.find_elements(By.TAG_NAME, "button")
-        for boton in botones:
-            if boton.text.lower() in ["iniciar sesión", "entrar", "login"]:
-                boton.click()
-                break
+        # 9. ESPERAR Y VERIFICAR
+        imprimir("⏳ ESPERANDO RESPUESTA...")
+        esperar_tiempo(6, 10)
         
-        esperar_tiempo(4, 6)
-        imprimir("✅ Login completado")
-        return True
+        # Tomar screenshot DESPUÉS
+        driver.save_screenshot("04_despues_del_login.png")
+        imprimir(f"📍 URL después: {driver.current_url}")
+        imprimir(f"📄 Título después: {driver.title}")
+        
+        # 10. VERIFICAR SI ESTAMOS LOGUEADOS
+        # Buscar texto que indique éxito
+        page_text = driver.page_source.lower()
+        
+        indicadores_exito = ['mis anuncios', 'mi cuenta', 'cerrar sesión', 'salir', 'mis-anuncios']
+        indicadores_fracaso = ['contraseña incorrecta', 'email incorrecto', 'error', 'invalid']
+        
+        exito = False
+        for indicador in indicadores_exito:
+            if indicador in page_text or indicador in driver.current_url.lower():
+                imprimir(f"✅ INDICADOR DE ÉXITO: '{indicador}' encontrado")
+                exito = True
+        
+        for indicador in indicadores_fracaso:
+            if indicador in page_text:
+                imprimir(f"❌ INDICADOR DE FRACASO: '{indicador}' encontrado")
+                exito = False
+        
+        if exito:
+            imprimir("🎉 LOGIN EXITOSO (según indicadores)")
+            return True
+        else:
+            imprimir("⚠️ LOGIN INCIERTO - Revisar screenshots")
+            return True  # Intentar continuar de todas formas
         
     except Exception as e:
-        imprimir(f"❌ Error en login: {e}")
+        imprimir(f"💥 ERROR CRÍTICO: {str(e)}")
+        imprimir("📸 Guardando screenshot de error...")
+        try:
+            driver.save_screenshot("error_final.png")
+        except:
+            pass
         return False
 
 def renovar_anuncio(driver, url, numero):
